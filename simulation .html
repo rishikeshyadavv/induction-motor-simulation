@@ -1,0 +1,1361 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3-Phase AC Induction Motor Simulator</title>
+    <!-- Three.js from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <style>
+        :root {
+            /* Dark Theme (Default) */
+            --bg-color: #060b13;
+            --panel-bg: rgba(10, 18, 30, 0.75);
+            --panel-border: rgba(64, 128, 255, 0.2);
+            --text-main: #e0f0ff;
+            --text-muted: #8a9bb2;
+            --accent-cyan: #00e5ff;
+            --accent-blue: #4285F4;
+            --accent-green: #34A853;
+            --accent-orange: #FBBC05;
+            --accent-red: #ff3333;
+            --btn-bg: rgba(0, 229, 255, 0.1);
+            --btn-hover: rgba(0, 229, 255, 0.3);
+            --glass-blur: blur(12px);
+            --font-mono: 'Courier New', Courier, monospace;
+        }
+
+        body.light-mode {
+            --bg-color: #e8eef5;
+            --panel-bg: rgba(255, 255, 255, 0.85);
+            --panel-border: rgba(0, 0, 0, 0.1);
+            --text-main: #1a2533;
+            --text-muted: #5a6b82;
+            --btn-bg: rgba(0, 120, 255, 0.1);
+            --btn-hover: rgba(0, 120, 255, 0.2);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: radial-gradient(circle at 50% 0%, rgba(0, 229, 255, 0.05) 0%, transparent 70%), 
+                              radial-gradient(circle at 50% 100%, rgba(66, 133, 244, 0.05) 0%, transparent 70%);
+            color: var(--text-main);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            transition: background-color 0.5s;
+        }
+
+        #webgl-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            pointer-events: auto;
+        }
+
+        /* Layout Grid */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: grid;
+            grid-template-columns: 320px 1fr 320px;
+            grid-template-rows: 60px 1fr 220px;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        header {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: auto;
+        }
+
+        h1 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--accent-cyan);
+            margin-left: 10px;
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            background: var(--btn-bg);
+            color: var(--text-main);
+            border: 1px solid var(--accent-cyan);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background: var(--btn-hover);
+            box-shadow: 0 0 10px var(--accent-cyan);
+        }
+
+        button.active {
+            background: var(--accent-cyan);
+            color: #000;
+        }
+
+        button.btn-red {
+            border-color: var(--accent-red);
+            color: var(--accent-red);
+        }
+
+        button.btn-red:hover {
+            background: rgba(255, 51, 51, 0.2);
+            box-shadow: 0 0 10px var(--accent-red);
+        }
+
+        /* Left Panel - Controls */
+        #controls-panel {
+            grid-column: 1;
+            grid-row: 2;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow-y: auto;
+            min-height: 0;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .control-group label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        input[type=range] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: var(--accent-cyan);
+        }
+
+        .toggle-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        /* Right Panel - Telemetry & Faults */
+        #right-panel {
+            grid-column: 3;
+            grid-row: 2;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow-y: auto;
+            min-height: 0;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .data-card {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 10px;
+            border-radius: 8px;
+            border-left: 3px solid var(--accent-cyan);
+        }
+
+        .data-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .data-value {
+            font-size: 1.1rem;
+            font-family: var(--font-mono);
+            font-weight: bold;
+            margin-top: 4px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+
+        .badge-green {
+            background: rgba(52, 168, 83, 0.2);
+            color: var(--accent-green);
+        }
+
+        .badge-orange {
+            background: rgba(251, 188, 5, 0.2);
+            color: var(--accent-orange);
+        }
+
+        .badge-red {
+            background: rgba(255, 51, 51, 0.2);
+            color: var(--accent-red);
+        }
+
+        .fault-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            font-size: 0.85rem;
+        }
+
+        .fault-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #333;
+            transition: background 0.3s;
+        }
+
+        .indicator.active-red {
+            background: var(--accent-red);
+            box-shadow: 0 0 8px var(--accent-red);
+        }
+
+        .indicator.active-orange {
+            background: var(--accent-orange);
+            box-shadow: 0 0 8px var(--accent-orange);
+        }
+
+        .indicator.active-green {
+            background: var(--accent-green);
+            box-shadow: 0 0 8px var(--accent-green);
+        }
+
+        /* Bottom Panel - Canvases */
+        #dashboards {
+            grid-column: 1 / -1;
+            grid-row: 3;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 20px;
+            min-height: 0;
+        }
+
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 0;
+            min-height: 0;
+        }
+
+        .canvas-title {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 5px;
+            width: 100%;
+            text-align: center;
+        }
+
+        canvas {
+            width: 100%;
+            height: calc(100% - 20px);
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            border: 1px solid var(--panel-border);
+        }
+
+        /* Tooltip */
+        #tooltip {
+            position: absolute;
+            top: -1000px;
+            left: -1000px;
+            padding: 15px;
+            width: 250px;
+            background: var(--panel-bg);
+            backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--accent-cyan);
+            border-radius: 8px;
+            color: var(--text-main);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 100;
+            box-shadow: 0 8px 32px rgba(0, 229, 255, 0.2);
+        }
+
+        #tooltip h3 {
+            color: var(--accent-cyan);
+            font-size: 1rem;
+            margin-bottom: 5px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 5px;
+        }
+
+        #tooltip p {
+            font-size: 0.8rem;
+            margin: 4px 0;
+            line-height: 1.4;
+        }
+
+        .tt-label {
+            color: var(--text-muted);
+            font-weight: bold;
+        }
+
+        .tt-formula {
+            font-family: var(--font-mono);
+            color: var(--accent-orange);
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 4px;
+            border-radius: 4px;
+            display: block;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="webgl-container"></div>
+
+    <div id="ui-layer">
+        <!-- HEADER -->
+        <header class="glass-panel">
+            <h1>AC Induction Motor Simulator</h1>
+            <div class="header-controls">
+                <button id="btn-theme" onclick="toggleTheme()">Light Mode</button>
+                <button id="btn-export" onclick="exportCSV()">Export CSV</button>
+            </div>
+        </header>
+
+        <!-- LEFT PANEL: CONTROLS -->
+        <aside id="controls-panel" class="glass-panel">
+            <h2 style="font-size: 1rem; border-bottom: 1px solid var(--panel-border); padding-bottom: 10px;">Motor
+                Control</h2>
+
+            <button id="btn-power" class="btn-red" onclick="togglePower()"
+                style="padding: 12px; font-size: 1.1rem; margin-top: 5px;">START MOTOR</button>
+
+            <div class="control-group" style="margin-top: 15px;">
+                <label>Supply Frequency (Hz) <span id="val-freq" class="data-value"
+                        style="font-size:0.9rem;">50.0</span></label>
+                <input type="range" id="slider-freq" min="10" max="60" step="0.5" value="50">
+            </div>
+
+            <div class="control-group">
+                <label>Number of Poles <span id="val-poles" class="data-value"
+                        style="font-size:0.9rem;">4</span></label>
+                <input type="range" id="slider-poles" min="2" max="8" step="2" value="4">
+            </div>
+
+            <div class="control-group">
+                <label>
+                    <span style="display:flex; align-items:center; gap:5px;">Supply Voltage <label style="font-size:0.75rem; color:var(--accent-cyan); display:flex; align-items:center; gap:2px; cursor:pointer;"><input type="checkbox" id="check-vf"> V/f Mode</label></span>
+                    <span id="val-volt" class="data-value" style="font-size:0.9rem;">400.0</span>
+                </label>
+                <input type="range" id="slider-volt" min="200" max="480" step="5" value="400">
+            </div>
+
+            <div class="control-group">
+                <label>
+                    <span style="display:flex; align-items:center; gap:5px;">Mech. Load <select id="sel-loadtype" style="background:var(--btn-bg); color:var(--text-main); border:1px solid var(--accent-cyan); border-radius:4px; font-size:0.75rem; outline:none;"><option value="linear">Linear</option><option value="quadratic">Fan/Pump</option><option value="constant">Conveyor</option></select></span>
+                    <span id="val-load" class="data-value" style="font-size:0.9rem;">30.0</span>
+                </label>
+                <input type="range" id="slider-load" min="0" max="100" step="1" value="30">
+            </div>
+
+            <div class="control-group">
+                <label>Rotor Inertia <span id="val-inertia" class="data-value" style="font-size:0.9rem;">1.0x</span></label>
+                <input type="range" id="slider-inertia" min="0.1" max="5.0" step="0.1" value="1.0">
+            </div>
+
+            <div class="control-group">
+                <label>Rotor Res. Multiplier <span id="val-res" class="data-value"
+                        style="font-size:0.9rem;">1.0x</span></label>
+                <input type="range" id="slider-res" min="1" max="5" step="0.5" value="1">
+            </div>
+
+            <h2
+                style="font-size: 1rem; border-bottom: 1px solid var(--panel-border); padding-bottom: 5px; margin-top: 15px;">
+                View Overlays</h2>
+            <div class="toggle-grid">
+                <button id="btn-xray" onclick="toggleView('xray')">X-Ray</button>
+                <button id="btn-explode" onclick="toggleView('explode')">Exploded</button>
+                <button id="btn-clip" onclick="toggleView('clip')">Cross-Section</button>
+                <button id="btn-mag" onclick="toggleView('mag')">Mag Field</button>
+                <button id="btn-thermal" onclick="toggleView('thermal')" style="grid-column: 1 / -1;">Thermal
+                    Overlay</button>
+            </div>
+            <p style="font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-top: 10px;">Click any 3D
+                part to inspect</p>
+        </aside>
+
+        <!-- RIGHT PANEL: TELEMETRY & FAULTS -->
+        <aside id="right-panel" class="glass-panel">
+            <h2 style="font-size: 1rem; border-bottom: 1px solid var(--panel-border); padding-bottom: 10px;">Live
+                Telemetry</h2>
+
+            <div class="dashboard-grid">
+                <div class="data-card">
+                    <div class="data-label">Sync Speed (Ns)</div>
+                    <div class="data-value" id="tel-ns">0 RPM</div>
+                </div>
+                <div class="data-card">
+                    <div class="data-label">Rotor Speed (Nr)</div>
+                    <div class="data-value" id="tel-nr">0 RPM</div>
+                </div>
+                <div class="data-card">
+                    <div class="data-label">Slip</div>
+                    <div class="data-value" id="tel-slip">0.00 %</div>
+                </div>
+                <div class="data-card">
+                    <div class="data-label">Torque</div>
+                    <div class="data-value" id="tel-torque">0.00 Nm</div>
+                </div>
+                <div class="data-card">
+                    <div class="data-label">Power Factor</div>
+                    <div class="data-value" id="tel-pf">0.00</div>
+                </div>
+                <div class="data-card">
+                    <div class="data-label">Efficiency</div>
+                    <div class="data-value" id="tel-eff">0.0 %</div>
+                </div>
+                <div class="data-card">
+                    <div class="data-label">Input Power</div>
+                    <div class="data-value" id="tel-pin">0.00 kW</div>
+                </div>
+                <div class="data-card" style="border-left-color: transparent;">
+                    <div class="data-label">Temperature</div>
+                    <div class="data-value"><span id="tel-temp" class="badge badge-green">20.0 °C</span></div>
+                </div>
+            </div>
+
+            <h2
+                style="font-size: 1rem; border-bottom: 1px solid var(--panel-border); padding-bottom: 5px; margin-top: 10px;">
+                System Status</h2>
+            <ul class="fault-list">
+                <li class="fault-item">
+                    <div class="indicator" id="ind-nominal"></div> All Systems Nominal
+                </li>
+                <li class="fault-item">
+                    <div class="indicator" id="ind-stop"></div> Motor Stopped
+                </li>
+                <li class="fault-item">
+                    <div class="indicator" id="ind-temp"></div> Overtemperature (> 75°C)
+                </li>
+                <li class="fault-item">
+                    <div class="indicator" id="ind-volt"></div> Voltage Out-of-Range
+                </li>
+                <li class="fault-item">
+                    <div class="indicator" id="ind-slip"></div> High Slip / Overload
+                </li>
+            </ul>
+        </aside>
+
+        <!-- BOTTOM PANEL: DASHBOARDS -->
+        <footer id="dashboards" class="glass-panel">
+            <div class="canvas-container">
+                <div class="canvas-title">3-Phase Waveform & Instantaneous}</div>
+                <canvas id="canvas-wave" style="cursor: crosshair;"></canvas>
+                <!-- Floating tooltip for oscilloscope -->
+                <div id="wave-tooltip" style="position:absolute; top:30px; left:10px; background:rgba(0,0,0,0.7); padding:5px; border-radius:4px; font-family:monospace; font-size:0.75rem; pointer-events:none; opacity:0; color:#fff; border:1px solid rgba(255,255,255,0.2);"></div>
+            </div>
+            <div class="canvas-container">
+                <div class="canvas-title">Torque-Speed Characteristic</div>
+                <canvas id="canvas-ts"></canvas>
+            </div>
+            <div class="canvas-container">
+                <div class="canvas-title">Phasor Diagram (V & I)</div>
+                <canvas id="canvas-phasor"></canvas>
+            </div>
+            <div class="canvas-container">
+                <div class="canvas-title">Current Vector Locus (Circle Diagram)</div>
+                <canvas id="canvas-locus"></canvas>
+            </div>
+        </footer>
+    </div>
+
+    <!-- FLOATING TOOLTIP -->
+    <div id="tooltip">
+        <h3 id="tt-title">Part Name</h3>
+        <p><span class="tt-label">Material:</span> <span id="tt-mat">Material</span></p>
+        <p><span class="tt-label">Function:</span> <span id="tt-func">Function desc</span></p>
+        <span class="tt-formula" id="tt-form">Formula</span>
+    </div>
+
+    <script>
+        /** 
+         * ==========================================
+         * STATE & PHYSICS ENGINE
+         * ==========================================
+         */
+        const state = {
+            isRunning: false,
+            freq: 50,
+            load: 30, // %
+            voltage: 400,
+            temp: 20,
+            // Physics Outputs
+            Ns: 1500,
+            Nr: 0,
+            slipRaw: 0,
+            slipDisplay: 0,
+            torque: 0,
+            pf: 0,
+            eff: 0,
+            pin: 0,
+            // Constants
+            poles: 4,
+            r2Factor: 1, // Rotor resistance multiplier
+            vRated: 400,
+            pRated: 100000, // Tuned to hit 45Nm cap naturally at high slip
+            tMax: 45,
+            // Animation/Simulation Time
+            time: 0,
+            history: [],
+            // New Advanced States
+            vfMode: false,
+            loadType: "linear",
+            inertia: 1.0
+        };
+
+        // UI Elements mapping
+        const UI = {
+            freq: document.getElementById('slider-freq'), valFreq: document.getElementById('val-freq'),
+            poles: document.getElementById('slider-poles'), valPoles: document.getElementById('val-poles'),
+            load: document.getElementById('slider-load'), valLoad: document.getElementById('val-load'),
+            volt: document.getElementById('slider-volt'), valVolt: document.getElementById('val-volt'),
+            res: document.getElementById('slider-res'), valRes: document.getElementById('val-res'),
+            vfMode: document.getElementById('check-vf'), loadType: document.getElementById('sel-loadtype'),
+            inertia: document.getElementById('slider-inertia'), valInertia: document.getElementById('val-inertia'),
+            telNs: document.getElementById('tel-ns'), telNr: document.getElementById('tel-nr'),
+            telSlip: document.getElementById('tel-slip'), telTorque: document.getElementById('tel-torque'),
+            telPf: document.getElementById('tel-pf'), telEff: document.getElementById('tel-eff'),
+            telPin: document.getElementById('tel-pin'), telTemp: document.getElementById('tel-temp'),
+            inds: {
+                nom: document.getElementById('ind-nominal'), stop: document.getElementById('ind-stop'),
+                temp: document.getElementById('ind-temp'), volt: document.getElementById('ind-volt'), slip: document.getElementById('ind-slip')
+            }
+        };
+
+        // Listeners
+        UI.freq.addEventListener('input', (e) => { 
+            state.freq = parseFloat(e.target.value); 
+            UI.valFreq.innerText = state.freq.toFixed(1); 
+            if(state.vfMode) {
+                state.voltage = (400 / 50) * state.freq;
+                UI.volt.value = state.voltage;
+                UI.valVolt.innerText = state.voltage.toFixed(1) + " V";
+            }
+            updatePhysics();
+        });
+        UI.poles.addEventListener('input', (e) => { state.poles = parseInt(e.target.value); UI.valPoles.innerText = state.poles; updatePhysics(); });
+        UI.load.addEventListener('input', (e) => { state.load = parseFloat(e.target.value); UI.valLoad.innerText = state.load.toFixed(1) + " %"; });
+        
+        UI.volt.addEventListener('input', (e) => { 
+            if(!state.vfMode) {
+                state.voltage = parseFloat(e.target.value); 
+                UI.valVolt.innerText = state.voltage.toFixed(1) + " V"; 
+            } else {
+                UI.volt.value = state.voltage; // prevent manual change if V/f mode is active
+            }
+        });
+        
+        UI.res.addEventListener('input', (e) => { state.r2Factor = parseFloat(e.target.value); UI.valRes.innerText = state.r2Factor.toFixed(1) + "x"; updatePhysics(); });
+        
+        UI.vfMode.addEventListener('change', (e) => {
+            state.vfMode = e.target.checked;
+            if(state.vfMode) {
+                state.voltage = (400 / 50) * state.freq;
+                UI.volt.value = state.voltage;
+                UI.valVolt.innerText = state.voltage.toFixed(1) + " V";
+            }
+        });
+        
+        UI.loadType.addEventListener('change', (e) => { state.loadType = e.target.value; updatePhysics(); });
+        UI.inertia.addEventListener('input', (e) => { state.inertia = parseFloat(e.target.value); UI.valInertia.innerText = state.inertia.toFixed(1) + "x"; });
+
+        function togglePower() {
+            state.isRunning = !state.isRunning;
+            const btn = document.getElementById('btn-power');
+            if (state.isRunning) {
+                btn.innerText = "STOP MOTOR";
+                btn.classList.remove('btn-red');
+                btn.classList.add('active');
+            } else {
+                btn.innerText = "START MOTOR";
+                btn.classList.add('btn-red');
+                btn.classList.remove('active');
+            }
+        }
+
+        function updatePhysics() {
+            state.Ns = (120 * state.freq) / state.poles;
+
+            // Base slip based on load percentage
+            let baseSlip = (0.01 + (state.load / 100) * 0.065) * state.r2Factor;
+            let targetSlip = baseSlip;
+
+            if (state.loadType === "quadratic") {
+                let speedRatio = state.Nr / state.Ns;
+                targetSlip = baseSlip * (speedRatio * speedRatio);
+            } else if (state.loadType === "linear") {
+                let speedRatio = state.Nr / state.Ns;
+                targetSlip = baseSlip * speedRatio;
+            }
+            if (targetSlip < 0.005) targetSlip = 0.005; // No-load friction slip
+
+            if (state.isRunning) {
+                let targetNr = state.Ns * (1 - targetSlip);
+                // Acceleration modified by rotor inertia
+                let rate = state.Ns / (1.5 * 60 * state.inertia);
+
+                if (state.Nr < targetNr) state.Nr = Math.min(state.Nr + rate, targetNr);
+                if (state.Nr > targetNr) state.Nr = Math.max(state.Nr - rate, targetNr);
+
+                state.slipRaw = (state.Ns - state.Nr) / state.Ns;
+                state.slipDisplay = state.slipRaw * 100;
+
+                // Torque calculation
+                let rawTorque = (9.55 * state.pRated * state.slipRaw * Math.pow(state.voltage / state.vRated, 2)) / state.Ns;
+                state.torque = Math.min(rawTorque, state.tMax);
+                if (state.Nr < 10 && state.loadType !== "constant") state.torque = rawTorque * (state.Nr / 10); // Smoothing unless conveyor
+
+                state.pf = 0.78 + (state.load / 100) * 0.08 - state.slipRaw * 0.5;
+                state.eff = 75 + (state.load / 100) * 20 - state.slipRaw * 80;
+                state.eff = Math.max(60, Math.min(state.eff, 95));
+
+                state.pin = (state.torque * state.Nr * (2 * Math.PI / 60)) / (state.eff / 100) / 1000;
+
+                // Temperature rises
+                state.temp += (state.load / 100) * 0.05;
+                if (state.temp > 120) state.temp = 120;
+            } else {
+                // Spin down
+                let rate = 1500 / (1.5 * 60);
+                if (state.Nr > 0) state.Nr = Math.max(state.Nr - rate, 0);
+
+                state.slipRaw = 0;
+                state.slipDisplay = 0;
+                state.torque = 0;
+                state.pf = 0;
+                state.eff = 0;
+                state.pin = 0;
+
+                state.temp -= 0.02;
+                if (state.temp < 20) state.temp = 20;
+            }
+        }
+
+        // Update Telemetry 10Hz
+        setInterval(() => {
+            UI.telNs.innerText = Math.round(state.Ns) + " RPM";
+            UI.telNr.innerText = Math.round(state.Nr) + " RPM";
+            UI.telSlip.innerText = state.slipDisplay.toFixed(2) + " %";
+            UI.telTorque.innerText = state.torque.toFixed(2) + " Nm";
+            UI.telPf.innerText = state.isRunning ? state.pf.toFixed(2) : "0.00";
+            UI.telEff.innerText = state.isRunning ? state.eff.toFixed(1) + " %" : "0.0 %";
+            UI.telPin.innerText = state.pin.toFixed(2) + " kW";
+
+            UI.telTemp.innerText = state.temp.toFixed(1) + " °C";
+            UI.telTemp.className = "badge " + (state.temp < 60 ? "badge-green" : state.temp < 80 ? "badge-orange" : "badge-red");
+
+            // Fault Panel
+            let fTemp = state.temp > 75;
+            let fVolt = state.voltage < 330 || state.voltage > 460;
+            let fSlip = (state.slipRaw * 100) > 6 && state.isRunning;
+            let fStop = !state.isRunning;
+
+            UI.inds.temp.className = "indicator " + (fTemp ? "active-red" : "");
+            UI.inds.volt.className = "indicator " + (fVolt ? "active-orange" : "");
+            UI.inds.slip.className = "indicator " + (fSlip ? "active-orange" : "");
+            UI.inds.stop.className = "indicator " + (fStop ? "active-red" : "");
+
+            let allNominal = !fTemp && !fVolt && !fSlip && !fStop;
+            UI.inds.nom.className = "indicator " + (allNominal ? "active-green" : "");
+
+            // Log for CSV
+            state.history.push({
+                time: new Date().toISOString().split('T')[1].slice(0, -1),
+                Ns: Math.round(state.Ns), Nr: Math.round(state.Nr),
+                slip: state.slipDisplay.toFixed(2), torque: state.torque.toFixed(2),
+                pf: state.pf.toFixed(2), eff: state.eff.toFixed(1), temp: state.temp.toFixed(1)
+            });
+            if (state.history.length > 600) state.history.shift(); // 60s at 10Hz
+
+        }, 100);
+
+        function exportCSV() {
+            let csv = "Time,Ns(RPM),Nr(RPM),Slip(%),Torque(Nm),PF,Efficiency(%),Temp(C)\n";
+            state.history.forEach(row => {
+                csv += `${row.time},${row.Ns},${row.Nr},${row.slip},${row.torque},${row.pf},${row.eff},${row.temp}\n`;
+            });
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.setAttribute('href', url);
+            a.setAttribute('download', 'motor_telemetry.csv');
+            a.click();
+        }
+
+        function toggleTheme() {
+            const isLight = document.body.classList.toggle('light-mode');
+            document.getElementById('btn-theme').innerText = isLight ? "Dark Mode" : "Light Mode";
+        }
+
+        /**
+         * ==========================================
+         * THREE.JS 3D ENGINE
+         * ==========================================
+         */
+        const viewState = { xray: false, explode: false, clip: false, mag: false, thermal: false };
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.localClippingEnabled = true;
+        document.getElementById('webgl-container').appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        camera.position.set(12, 8, 15);
+
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(10, 20, 10);
+        scene.add(dirLight);
+        const backLight = new THREE.DirectionalLight(0x4285F4, 0.5);
+        backLight.position.set(-10, -10, -10);
+        scene.add(backLight);
+
+        // Materials
+        const clipPlane = new THREE.Plane(new THREE.Vector3(1, 0, 0), 0.5);
+        const clipPlanes = []; // Filled dynamically when toggled
+
+        const matMetal = new THREE.MeshStandardMaterial({ color: 0x8899a6, metalness: 0.8, roughness: 0.3, side: THREE.DoubleSide, clippingPlanes: clipPlanes });
+        const matCasing = new THREE.MeshStandardMaterial({ color: 0x223344, metalness: 0.5, roughness: 0.6, side: THREE.DoubleSide, clippingPlanes: clipPlanes });
+        const matCopper = new THREE.MeshStandardMaterial({ color: 0xb87333, metalness: 0.6, roughness: 0.4, side: THREE.DoubleSide, clippingPlanes: clipPlanes });
+        const matAluminum = new THREE.MeshStandardMaterial({ color: 0xd8d8d8, metalness: 0.9, roughness: 0.2, side: THREE.DoubleSide, clippingPlanes: clipPlanes });
+        const matStator = new THREE.MeshStandardMaterial({ color: 0x334455, metalness: 0.7, roughness: 0.5, side: THREE.DoubleSide, clippingPlanes: clipPlanes });
+
+        // Groups
+        const motorGroup = new THREE.Group(); scene.add(motorGroup);
+        const rotorGroup = new THREE.Group(); motorGroup.add(rotorGroup);
+        const statorGroup = new THREE.Group(); motorGroup.add(statorGroup);
+        const casingGroup = new THREE.Group(); motorGroup.add(casingGroup);
+        const magFieldGroup = new THREE.Group(); motorGroup.add(magFieldGroup);
+        magFieldGroup.visible = false;
+
+        // 1. ROTOR (Shaft, Core, 24 Bars, 2 End Rings)
+        const shaftGeom = new THREE.CylinderGeometry(0.5, 0.5, 14, 32);
+        shaftGeom.rotateX(Math.PI / 2);
+        const shaft = new THREE.Mesh(shaftGeom, matMetal);
+        shaft.userData = { name: "Motor Shaft", mat: "High-Carbon Steel", func: "Transmits mechanical torque to load", form: "P = T × ω" };
+        rotorGroup.add(shaft);
+
+        const rotorCoreGeom = new THREE.CylinderGeometry(1.9, 1.9, 6, 32);
+        rotorCoreGeom.rotateX(Math.PI / 2);
+        const rotorCore = new THREE.Mesh(rotorCoreGeom, matMetal);
+        rotorCore.userData = { name: "Rotor Laminated Core", mat: "Silicon Steel", func: "Provides low-reluctance magnetic path", form: "Nr = Ns × (1 - s)" };
+        rotorGroup.add(rotorCore);
+
+        for (let i = 0; i < 24; i++) {
+            const angle = (i / 24) * Math.PI * 2;
+            const barGeom = new THREE.CylinderGeometry(0.1, 0.1, 6.2, 8);
+            barGeom.rotateX(Math.PI / 2);
+            const bar = new THREE.Mesh(barGeom, matAluminum);
+            bar.position.set(Math.cos(angle) * 1.7, Math.sin(angle) * 1.7, 0);
+            bar.userData = { name: "Squirrel-Cage Conductor Bar", mat: "Cast Aluminum", func: "Carries induced rotor current", form: "I_r ∝ s × E_r" };
+            rotorGroup.add(bar);
+        }
+
+        const ringGeom = new THREE.TorusGeometry(1.7, 0.15, 16, 32);
+        const ring1 = new THREE.Mesh(ringGeom, matAluminum); ring1.position.z = 3.1;
+        const ring2 = new THREE.Mesh(ringGeom, matAluminum); ring2.position.z = -3.1;
+        ring1.userData = ring2.userData = { name: "End Ring", mat: "Aluminum", func: "Short-circuits rotor bars", form: "Creates closed loop for I_r" };
+        rotorGroup.add(ring1, ring2);
+
+        // Bearings
+        const bearingGeom = new THREE.TorusGeometry(0.8, 0.3, 16, 32);
+        const b1 = new THREE.Mesh(bearingGeom, matMetal); b1.position.z = 4.5;
+        const b2 = new THREE.Mesh(bearingGeom, matMetal); b2.position.z = -4.5;
+        b1.userData = b2.userData = { name: "Deep-Groove Ball Bearing", mat: "Chrome Steel", func: "Reduces friction for rotating shaft", form: "Friction Loss ∝ Nr" };
+        casingGroup.add(b1, b2); // Attach to casing so they explode away from rotor properly
+
+        // 2. STATOR (Core, Windings)
+        const statorShape = new THREE.Shape();
+        statorShape.absarc(0, 0, 3.5, 0, Math.PI * 2, false);
+        const statorHole = new THREE.Path();
+        statorHole.absarc(0, 0, 2.0, 0, Math.PI * 2, true); // 0.1 air gap
+        statorShape.holes.push(statorHole);
+        const statorExtrude = new THREE.ExtrudeGeometry(statorShape, { depth: 6, curveSegments: 32, bevelEnabled: false });
+        statorExtrude.translate(0, 0, -3);
+        const statorCore = new THREE.Mesh(statorExtrude, matStator);
+        statorCore.userData = { name: "Stator Laminated Core", mat: "Silicon Steel", func: "Houses windings & carries flux", form: "Ns = 120f / P" };
+        statorGroup.add(statorCore);
+
+        // Stator Windings (Visual representation)
+        const windGeom = new THREE.TorusGeometry(2.7, 0.5, 16, 64);
+        const wind1 = new THREE.Mesh(windGeom, matCopper); wind1.position.z = 3;
+        const wind2 = new THREE.Mesh(windGeom, matCopper); wind2.position.z = -3;
+        wind1.userData = wind2.userData = { name: "3-Phase Stator Windings", mat: "Insulated Copper Wire", func: "Generates rotating magnetic field", form: "B = B_max sin(ωt - θ)" };
+        statorGroup.add(wind1, wind2);
+
+        // 3. CASING (Shell, Fins, Terminal Box)
+        const caseShape = new THREE.Shape();
+        caseShape.absarc(0, 0, 4.0, 0, Math.PI * 2, false);
+        const caseHole = new THREE.Path();
+        caseHole.absarc(0, 0, 3.5, 0, Math.PI * 2, true);
+        caseShape.holes.push(caseHole);
+        const caseExtrude = new THREE.ExtrudeGeometry(caseShape, { depth: 8, curveSegments: 32, bevelEnabled: false });
+        caseExtrude.translate(0, 0, -4);
+        const casingShell = new THREE.Mesh(caseExtrude, matCasing);
+        casingShell.userData = { name: "Motor Enclosure", mat: "Cast Iron", func: "Protects internals & dissipates heat", form: "Q = h × A × ΔT" };
+        casingGroup.add(casingShell);
+
+        for (let i = 0; i < 20; i++) {
+            const angle = (i / 20) * Math.PI * 2;
+            const fin = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.2, 8), matCasing);
+            fin.position.set(Math.cos(angle) * 4.2, Math.sin(angle) * 4.2, 0);
+            fin.rotation.z = angle;
+            fin.userData = casingShell.userData;
+            casingGroup.add(fin);
+        }
+
+        const termBox = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 2), matCasing);
+        termBox.position.set(0, 4.5, 0);
+        termBox.userData = { name: "Terminal Box", mat: "Cast Iron", func: "Houses electrical connections (Star/Delta)", form: "V_L = √3 V_ph (Star)" };
+        casingGroup.add(termBox);
+
+        // 4. MAGNETIC FIELD LINES
+        for (let i = 0; i < 6; i++) {
+            const angle = (i / 6) * Math.PI * 2;
+            const lineMat = new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? 0x00e5ff : 0xff3333, transparent: true, opacity: 0.6, side: THREE.DoubleSide });
+            const lineGeom = new THREE.PlaneGeometry(0.5, 6);
+            lineGeom.rotateX(Math.PI / 2);
+            const line = new THREE.Mesh(lineGeom, lineMat);
+            line.position.set(Math.cos(angle) * 1.95, Math.sin(angle) * 1.95, 0);
+            line.rotation.z = angle;
+            magFieldGroup.add(line);
+        }
+
+        // Raycaster for Part Inspector
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        const tooltip = document.getElementById('tooltip');
+
+        // 5. CURRENT ARROWS (Visualizing Rotor Current Ir)
+        const currentArrowsGroup = new THREE.Group();
+        rotorGroup.add(currentArrowsGroup);
+        const arrowGeom = new THREE.ConeGeometry(0.15, 0.4, 8);
+        arrowGeom.rotateX(Math.PI / 2); // point along Z
+        const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0 });
+        const arrows = [];
+        for (let i = 0; i < 24; i++) {
+            const angle = (i / 24) * Math.PI * 2;
+            const arrow = new THREE.Mesh(arrowGeom, arrowMat);
+            arrow.position.set(Math.cos(angle) * 1.7, Math.sin(angle) * 1.7, 0);
+            currentArrowsGroup.add(arrow);
+            arrows.push({ mesh: arrow, baseZ: (i%2)*3 - 1.5 });
+        }
+
+        // 6. SPARK / FAULT PARTICLE SYSTEM
+        const sparkCount = 150;
+        const sparkGeom = new THREE.BufferGeometry();
+        const sparkPos = new Float32Array(sparkCount * 3);
+        const sparkVel = [];
+        for(let i=0; i<sparkCount; i++) {
+            sparkPos[i*3] = 0; sparkPos[i*3+1] = -100; sparkPos[i*3+2] = 0;
+            sparkVel.push(new THREE.Vector3(0,0,0));
+        }
+        sparkGeom.setAttribute('position', new THREE.BufferAttribute(sparkPos, 3));
+        const sparkMat = new THREE.PointsMaterial({ color: 0xffcc00, size: 0.15, transparent: true, opacity: 1, blending: THREE.AdditiveBlending });
+        const sparkParticles = new THREE.Points(sparkGeom, sparkMat);
+        motorGroup.add(sparkParticles);
+
+        // 7. HEAT-WAVE DISTORTION PLANE
+        const heatUnifs = { time: { value: 0 }, intensity: { value: 0 } };
+        const heatMat = new THREE.ShaderMaterial({
+            uniforms: heatUnifs,
+            vertexShader: `
+                varying vec2 vUv;
+                void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+            `,
+            fragmentShader: `
+                uniform float time;
+                uniform float intensity;
+                varying vec2 vUv;
+                void main() {
+                    float wave = sin(vUv.x * 30.0 + time * 5.0) * sin(vUv.y * 30.0 - time * 3.0);
+                    float alpha = (wave + 1.0) * 0.5 * intensity * (1.0 - vUv.y);
+                    gl_FragColor = vec4(1.0, 0.4, 0.1, alpha * 0.2); 
+                }
+            `,
+            transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+        });
+        const heatPlane = new THREE.Mesh(new THREE.PlaneGeometry(12, 10), heatMat);
+        heatPlane.position.set(0, 5, 0);
+        scene.add(heatPlane);
+
+        window.addEventListener('pointerdown', (e) => {
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(motorGroup.children, true);
+
+            if (intersects.length > 0) {
+                let obj = intersects[0].object;
+                if (obj.userData && obj.userData.name) {
+                    document.getElementById('tt-title').innerText = obj.userData.name;
+                    document.getElementById('tt-mat').innerText = obj.userData.mat;
+                    document.getElementById('tt-func').innerText = obj.userData.func;
+                    document.getElementById('tt-form').innerText = obj.userData.form;
+                    tooltip.style.left = e.clientX + 15 + 'px';
+                    tooltip.style.top = e.clientY + 15 + 'px';
+                    tooltip.style.opacity = 1;
+                    setTimeout(() => tooltip.style.opacity = 0, 4000); // Hide after 4s
+                }
+            } else {
+                tooltip.style.opacity = 0;
+            }
+        });
+
+        // UI Toggles
+        function toggleView(type) {
+            viewState[type] = !viewState[type];
+            document.getElementById('btn-' + type).classList.toggle('active');
+
+            if (type === 'clip') {
+                if (viewState.clip) clipPlanes.push(clipPlane);
+                else clipPlanes.length = 0; // empty array
+            }
+            if (type === 'mag') magFieldGroup.visible = viewState.mag;
+            if (type === 'xray') {
+                const setXray = (mesh, isX) => {
+                    if (mesh.userData.origMat) {
+                         mesh.userData.origMat.transparent = isX;
+                         mesh.userData.origMat.opacity = isX ? 0.2 : 1.0;
+                         mesh.userData.origMat.depthWrite = !isX;
+                    }
+                    if (mesh.userData.thermMat) {
+                         mesh.userData.thermMat.transparent = isX;
+                         mesh.userData.thermMat.opacity = isX ? 0.2 : 1.0;
+                         mesh.userData.thermMat.depthWrite = !isX;
+                    }
+                    if (mesh.material) {
+                         mesh.material.transparent = isX;
+                         mesh.material.opacity = isX ? 0.2 : 1.0;
+                         mesh.material.depthWrite = !isX;
+                    }
+                };
+                casingGroup.children.forEach(c => setXray(c, viewState.xray));
+                statorGroup.children.forEach(c => { if (c === statorCore) setXray(c, viewState.xray); });
+            }
+        }
+
+        // Render Loop & Animation
+        let lastTime = 0;
+        const targetExplode = { casingY: 0, rotorZ: 0 };
+        const curExplode = { casingY: 0, rotorZ: 0 };
+
+        function animate(time) {
+            requestAnimationFrame(animate);
+            let dt = (time - lastTime) / 1000 || 0;
+            lastTime = time;
+            state.time += dt;
+
+            updatePhysics();
+
+            // 1. Rotor Rotation
+            // Nr is in RPM. Rotations per second = Nr / 60. Rads per sec = (Nr/60)*2PI
+            let rotorRadsPerSec = (state.Nr / 60) * Math.PI * 2;
+            rotorGroup.rotation.z -= rotorRadsPerSec * dt;
+
+            // 2. Magnetic Field Rotation (Sync Speed)
+            let syncRadsPerSec = (state.Ns / 60) * Math.PI * 2;
+            if (state.isRunning) magFieldGroup.rotation.z -= syncRadsPerSec * dt;
+
+            // 3. Stator Glow Pulse (Frequency)
+            if (state.isRunning) {
+                let pulse = (Math.sin(state.time * state.freq * Math.PI * 2) + 1) / 2;
+                matCopper.emissive.setHex(0xffaa00);
+                matCopper.emissiveIntensity = pulse * 0.8;
+            } else {
+                matCopper.emissiveIntensity = 0;
+            }
+
+            // 4. Exploded View Interpolation
+            targetExplode.casingY = viewState.explode ? 6 : 0;
+            targetExplode.rotorZ = viewState.explode ? 12 : 0;
+            curExplode.casingY += (targetExplode.casingY - curExplode.casingY) * 0.05;
+            curExplode.rotorZ += (targetExplode.rotorZ - curExplode.rotorZ) * 0.05;
+
+            casingGroup.position.y = curExplode.casingY;
+            rotorGroup.position.z = curExplode.rotorZ;
+
+            // 6. Animate Current Arrows
+            if (state.isRunning && state.slipRaw > 0.01) {
+                arrowMat.opacity = Math.min((state.slipRaw / 0.1), 1.0) * 0.8;
+                let arrowSpeed = state.slipRaw * 30; // speed along bars
+                arrows.forEach(a => {
+                    a.baseZ += arrowSpeed * dt;
+                    if(a.baseZ > 3) a.baseZ -= 6;
+                    a.mesh.position.z = a.baseZ;
+                });
+            } else {
+                arrowMat.opacity = 0;
+            }
+
+            // 7. Animate Sparks
+            let isFault = state.temp > 100 || (state.slipRaw * 100 > 10 && state.isRunning);
+            let positions = sparkParticles.geometry.attributes.position.array;
+            for(let i=0; i<sparkCount; i++) {
+                if(isFault) {
+                    if(sparkVel[i].lengthSq() < 0.1) {
+                        let angle = Math.random() * Math.PI * 2;
+                        positions[i*3] = Math.cos(angle) * 3.5;
+                        positions[i*3+1] = Math.sin(angle) * 3.5;
+                        positions[i*3+2] = (Math.random() - 0.5) * 6;
+                        sparkVel[i].set((Math.random()-0.5)*8, Math.random()*8, (Math.random()-0.5)*8);
+                    }
+                }
+                positions[i*3] += sparkVel[i].x * dt;
+                positions[i*3+1] += sparkVel[i].y * dt;
+                positions[i*3+2] += sparkVel[i].z * dt;
+                sparkVel[i].y -= 9.8 * dt; // gravity
+                
+                if(positions[i*3+1] < -5) {
+                    sparkVel[i].set(0,0,0);
+                    positions[i*3+1] = -100; // hide
+                }
+            }
+            sparkParticles.geometry.attributes.position.needsUpdate = true;
+
+            // 8. Heat plane
+            heatUnifs.time.value = state.time;
+            if (state.temp > 80) {
+                heatUnifs.intensity.value = Math.min((state.temp - 80) / 40, 1.0);
+            } else {
+                heatUnifs.intensity.value = 0;
+            }
+            heatPlane.lookAt(camera.position);
+
+            // 9. Thermal Overlay
+            if (viewState.thermal) {
+                let tNorm = Math.min(Math.max((state.temp - 20) / 80, 0), 1); // 0 at 20C, 1 at 100C
+                let thermColor = new THREE.Color().setHSL(0.65 * (1 - tNorm), 1.0, 0.5); // Blue -> Red
+
+                motorGroup.traverse(child => {
+                    if (child.isMesh && child.material && child.userData && child.userData.mat) {
+                        if (!child.userData.origMat) child.userData.origMat = child.material;
+                        let thermMat = child.userData.thermMat;
+                        if (!thermMat) {
+                            thermMat = new THREE.MeshBasicMaterial({ clippingPlanes: clipPlanes });
+                            child.userData.thermMat = thermMat;
+                        }
+                        thermMat.transparent = child.userData.origMat.transparent;
+                        thermMat.opacity = child.userData.origMat.opacity;
+                        thermMat.depthWrite = child.userData.origMat.depthWrite;
+                        thermMat.color.copy(thermColor);
+                        child.material = thermMat;
+                    }
+                });
+            } else {
+                // Restore materials
+                motorGroup.traverse(child => {
+                    if (child.isMesh && child.userData && child.userData.origMat) {
+                        child.material = child.userData.origMat;
+                    }
+                });
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        requestAnimationFrame(animate);
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            resizeCanvases();
+        });
+
+        /**
+         * ==========================================
+         * CANVAS DASHBOARDS (Waveform, T-S Curve, Phasor)
+         * ==========================================
+         */
+        const cvsWave = document.getElementById('canvas-wave');
+        const ctxWave = cvsWave.getContext('2d');
+        const cvsTS = document.getElementById('canvas-ts');
+        const ctxTS = cvsTS.getContext('2d');
+        const cvsPhasor = document.getElementById('canvas-phasor');
+        const ctxPhasor = cvsPhasor.getContext('2d');
+        const cvsLocus = document.getElementById('canvas-locus');
+        const ctxLocus = cvsLocus.getContext('2d');
+
+        // Mouse tracking for Wave canvas
+        const waveTooltip = document.getElementById('wave-tooltip');
+        let waveMouseX = -1;
+        cvsWave.addEventListener('mousemove', (e) => {
+            waveMouseX = e.offsetX;
+            waveTooltip.style.opacity = 1;
+            waveTooltip.style.left = (e.clientX + 15) + 'px';
+            waveTooltip.style.top = (e.clientY - 20) + 'px';
+        });
+        cvsWave.addEventListener('mouseleave', () => { waveMouseX = -1; waveTooltip.style.opacity = 0; });
+
+        function resizeCanvases() {
+            [cvsWave, cvsTS, cvsPhasor, cvsLocus].forEach(c => {
+                let p = c.parentElement;
+                c.width = p.clientWidth;
+                c.height = p.clientHeight - 25;
+            });
+        }
+        resizeCanvases();
+
+        function drawDashboards() {
+            requestAnimationFrame(drawDashboards);
+
+            let w, h;
+            const isLight = document.body.classList.contains('light-mode');
+            const colorAxis = isLight ? "#888" : "#555";
+            const colorText = isLight ? "#333" : "#ccc";
+
+            // --- 1. WAVEFORM ---
+            w = cvsWave.width; h = cvsWave.height;
+            ctxWave.clearRect(0, 0, w, h);
+            ctxWave.strokeStyle = colorAxis;
+            ctxWave.beginPath(); ctxWave.moveTo(0, h / 2); ctxWave.lineTo(w, h / 2); ctxWave.stroke();
+
+            let amp = (state.voltage / 480) * (h / 3); // scale visually
+            let phaseTime = state.time * state.freq * Math.PI * 2;
+
+            const drawSine = (offset, color) => {
+                ctxWave.strokeStyle = color;
+                ctxWave.lineWidth = 2;
+                ctxWave.beginPath();
+                for (let x = 0; x < w; x++) {
+                    // mapping x to time backward
+                    let t = phaseTime - (x / w) * Math.PI * 4; // 2 cycles visible
+                    let y = h / 2 - Math.sin(t - offset) * amp;
+                    if (x === 0) ctxWave.moveTo(x, y); else ctxWave.lineTo(x, y);
+                }
+                ctxWave.stroke();
+            };
+            drawSine(0, "#4285F4"); // Phase A (Blue)
+            drawSine(Math.PI * 2 / 3, "#34A853"); // Phase B (Green)
+            drawSine(Math.PI * 4 / 3, "#FBBC05"); // Phase C (Orange)
+
+            // Current Magnitude Bars
+            let currentMag = state.isRunning ? (state.pin * 1000) / (Math.sqrt(3) * state.voltage * state.pf) : 0;
+            let iAmp = (currentMag / 100) * (h / 4); // visual scale
+            const drawBar = (x, val, color) => {
+                ctxWave.fillStyle = color;
+                ctxWave.fillRect(x, h - 10, 15, -Math.abs(val));
+            };
+            drawBar(10, Math.sin(phaseTime) * iAmp, "#4285F4");
+            drawBar(30, Math.sin(phaseTime - Math.PI * 2 / 3) * iAmp, "#34A853");
+            drawBar(50, Math.sin(phaseTime - Math.PI * 4 / 3) * iAmp, "#FBBC05");
+            ctxWave.fillStyle = colorText; ctxWave.font = "10px sans-serif";
+            ctxWave.fillText("Phase I Inst.", 10, h - 5);
+
+            // Wave tooltip update & crosshair
+            if (waveMouseX >= 0) {
+                ctxWave.strokeStyle = "rgba(255,255,255,0.5)";
+                ctxWave.setLineDash([2, 4]);
+                ctxWave.beginPath(); ctxWave.moveTo(waveMouseX, 0); ctxWave.lineTo(waveMouseX, h); ctxWave.stroke();
+                ctxWave.setLineDash([]);
+                
+                let tHover = phaseTime - (waveMouseX / w) * Math.PI * 4;
+                let vA = Math.sin(tHover) * state.voltage;
+                let vB = Math.sin(tHover - Math.PI * 2 / 3) * state.voltage;
+                let vC = Math.sin(tHover - Math.PI * 4 / 3) * state.voltage;
+                waveTooltip.innerHTML = `<span style="color:#4285F4">Va: ${vA.toFixed(1)}V</span><br><span style="color:#34A853">Vb: ${vB.toFixed(1)}V</span><br><span style="color:#FBBC05">Vc: ${vC.toFixed(1)}V</span>`;
+            }
+
+            // --- 2. TORQUE-SPEED CURVE ---
+            w = cvsTS.width; h = cvsTS.height;
+            ctxTS.clearRect(0, 0, w, h);
+            // Axes
+            ctxTS.strokeStyle = colorAxis; ctxTS.lineWidth = 1;
+            ctxTS.beginPath();
+            ctxTS.moveTo(20, 10); ctxTS.lineTo(20, h - 20); ctxTS.lineTo(w - 10, h - 20);
+            ctxTS.stroke();
+            ctxTS.fillStyle = colorText; ctxTS.fillText("Nr", w - 20, h - 5);
+            ctxTS.fillText("T", 5, 10);
+
+            // Draw Kloss curve roughly
+            let NsVisual = state.Ns; // Dynamically match current Ns
+            ctxTS.strokeStyle = "rgba(0, 229, 255, 0.5)"; ctxTS.lineWidth = 2;
+            ctxTS.beginPath();
+            let sMax = 0.2 * state.r2Factor; // slip at max torque depends on R2
+            for (let nx = 0; nx <= NsVisual; nx += (NsVisual/150)) {
+                let s = (NsVisual - nx) / NsVisual;
+                // simplified T curve based on Kloss formula
+                let t_val = s === 0 ? 0 : (2 * state.tMax) / (s / sMax + sMax / s);
+                let x = 20 + (nx / NsVisual) * (w - 40);
+                let y = (h - 20) - (t_val / 50) * (h - 40);
+                if (nx === 0) ctxTS.moveTo(x, y); else ctxTS.lineTo(x, y);
+            }
+            ctxTS.stroke();
+
+            // Current point
+            let currX = 20 + (state.Nr / state.Ns) * (w - 40);
+            let currY = (h - 20) - (state.torque / 50) * (h - 40);
+            if (currX > w - 20) currX = w - 20; // Bound checking if Nr > Ns slightly during physics jump
+            ctxTS.fillStyle = "#ff3333";
+            ctxTS.beginPath(); ctxTS.arc(currX, currY, 5, 0, Math.PI * 2); ctxTS.fill();
+            ctxTS.fillStyle = colorText; ctxTS.fillText("OP", currX + 8, currY - 8);
+
+            // --- 3. PHASOR DIAGRAM ---
+            w = cvsPhasor.width; h = cvsPhasor.height;
+            ctxPhasor.clearRect(0, 0, w, h);
+            let cx = w / 2, cy = h / 2;
+
+            // Draw V vectors
+            const drawVector = (angle, len, color, label, isDashed = false) => {
+                ctxPhasor.strokeStyle = color; ctxPhasor.lineWidth = 2;
+                if (isDashed) ctxPhasor.setLineDash([4, 4]); else ctxPhasor.setLineDash([]);
+                ctxPhasor.beginPath(); ctxPhasor.moveTo(cx, cy);
+                let vx = cx + Math.cos(angle) * len;
+                let vy = cy - Math.sin(angle) * len; // -y is up
+                ctxPhasor.lineTo(vx, vy); ctxPhasor.stroke();
+
+                // Arrowhead
+                let headLen = 6;
+                let aAngle = Math.atan2(-(vy - cy), vx - cx);
+                ctxPhasor.beginPath();
+                ctxPhasor.moveTo(vx, vy);
+                ctxPhasor.lineTo(vx - headLen * Math.cos(aAngle - Math.PI / 6), vy + headLen * Math.sin(aAngle - Math.PI / 6));
+                ctxPhasor.moveTo(vx, vy);
+                ctxPhasor.lineTo(vx - headLen * Math.cos(aAngle + Math.PI / 6), vy + headLen * Math.sin(aAngle + Math.PI / 6));
+                ctxPhasor.stroke();
+
+                ctxPhasor.fillStyle = colorText;
+                ctxPhasor.fillText(label, vx + 5, vy + 5);
+            };
+
+            let vLen = (h / 2) * 0.8;
+            drawVector(0, vLen, "#4285F4", "Va");
+            drawVector(Math.PI * 2 / 3, vLen, "#34A853", "Vb");
+            drawVector(Math.PI * 4 / 3, vLen, "#FBBC05", "Vc");
+
+            // Draw I vectors (Lagging by phi)
+            if (state.isRunning) {
+                let phi = Math.acos(state.pf); // lagging angle
+                let iLen = vLen * 0.6; // scale for visibility
+                drawVector(0 - phi, iLen, "rgba(66, 133, 244, 0.6)", "Ia", true);
+                drawVector(Math.PI * 2 / 3 - phi, iLen, "rgba(52, 168, 83, 0.6)", "Ib", true);
+                drawVector(Math.PI * 4 / 3 - phi, iLen, "rgba(251, 188, 5, 0.6)", "Ic", true);
+
+                ctxPhasor.fillStyle = colorText;
+                ctxPhasor.fillText(`pf=${state.pf.toFixed(2)} lag`, 5, 15);
+            }
+
+            // --- 4. CURRENT VECTOR LOCUS (Circle Diagram) ---
+            w = cvsLocus.width; h = cvsLocus.height;
+            ctxLocus.clearRect(0, 0, w, h);
+            ctxLocus.strokeStyle = colorAxis; ctxLocus.lineWidth = 1;
+            ctxLocus.beginPath();
+            ctxLocus.moveTo(10, h/2); ctxLocus.lineTo(w-10, h/2); // X axis
+            ctxLocus.moveTo(w/2, 10); ctxLocus.lineTo(w/2, h-10); // Y axis
+            ctxLocus.stroke();
+            
+            // Draw a theoretical circle
+            let radius = h * 0.35;
+            let centerX = w/2 + radius*0.2; 
+            let centerY = h/2;
+            ctxLocus.strokeStyle = "rgba(0, 229, 255, 0.3)";
+            ctxLocus.beginPath();
+            ctxLocus.arc(centerX, centerY, radius, 0, Math.PI, true); // Semi-circle
+            ctxLocus.stroke();
+            
+            // Current vector
+            if (state.isRunning) {
+                let phi = Math.acos(state.pf);
+                let currentScale = state.pin / 20; // simplified visual scaling
+                let ix = w/2 + Math.sin(phi) * currentScale * radius;
+                let iy = h/2 + Math.cos(phi) * currentScale * radius; // Lagging goes down if Y is inverted visually, wait canvas Y is down, so + goes down
+                
+                ctxLocus.strokeStyle = "#ff3333";
+                ctxLocus.lineWidth = 2;
+                ctxLocus.beginPath();
+                ctxLocus.moveTo(w/2, h/2);
+                ctxLocus.lineTo(ix, iy);
+                ctxLocus.stroke();
+                
+                ctxLocus.fillStyle = "#ff3333";
+                ctxLocus.beginPath(); ctxLocus.arc(ix, iy, 4, 0, Math.PI*2); ctxLocus.fill();
+                ctxLocus.fillStyle = colorText;
+                ctxLocus.fillText("I_stator (" + (state.pin*1000/(Math.sqrt(3)*state.voltage*state.pf)).toFixed(1) + "A)", ix+5, iy-5);
+            }
+        }
+        drawDashboards();
+
+        // Initial call
+        updatePhysics();
+
+    </script>
+</body>
+
+</html>
