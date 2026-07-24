@@ -68,4 +68,4 @@ If you need raw data for an assignment or lab report, click the **"Export CSV"**
 ---
 
 ## ⚖️ License
-Feel free to fork, expand upon, or use this specifically for educational or personal projects!
+Feel free to fork, expand upon, or use this specifically for educational or personal projects!!
